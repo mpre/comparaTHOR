@@ -4,9 +4,15 @@ import argparse
 import sys
 import os
 import csv
+import glob
 
 ANNOTATION_DIR='/home/prj_gralign/data/BMC-exp-sim/NewAnnos/'
-RESULTS_DIR='/home/prj_gralign/data/BMC-exp-sim/old-Results/'
+RESULTS_DIR='/home/prj_gralign/data/BMC-exp-sim/Results/'
+
+rmats_spladder_event_map = { 'RI'  : 'intron_retention',
+                             'SE'  : 'exon_skip',
+                             'A5SS': 'alt_5prime',
+                             'A3SS': 'alt_3prime'}
 
 def evaluate_asgal(args, gene_events, exp_events):
     asgal_introns = []
@@ -21,19 +27,105 @@ def evaluate_asgal(args, gene_events, exp_events):
     tp=len(set(asgal_introns) & set(exp_events))
     fp=len(set(asgal_introns) - set(exp_events) - set(gene_events.values()))
     fn=len(set(exp_events) - set(asgal_introns))
-    print("TP,FP,FN,PREC,REC")
-    print("{:},{},{},{:>.5},{:>.5}".format(tp, fp, fn, tp / (tp + fn), tp / (tp + fp)))
-
     return tp, fp, fn
 
-def evaluate_spladder():
+def evaluate_spladder(args, gene_events, exp_events):
+    spladder_introns = []
+    spladder_files_list = glob.glob(os.path.join(RESULTS_DIR, args.sample, args.chromosome,
+                                                 'spladder',  args.gene,   args.exp, '*.txt'))
+    for spladder_file in spladder_files_list:
+        with open(spladder_file) as spladder_current_event_file:
+            next(spladder_current_event_file, None) # Drop header
+            for row in spladder_current_event_file:
+                _, strand, event_id, _, *positions = row.strip('\n').split('\t')
+                if event_id.startswith('mult'):
+                    # here spladder outputs multiple positions in columns 2 and 3
+                    # We can set them to 0 and avoid problems later on
+                    positions[2], positions[3] = 0, 0
+                positions = tuple(int(p) for p in positions[:6])
+                spladder_introns += (spladder_parse_line(event_id,
+                                                         strand,
+                                                         positions))
+    tp=len(set(spladder_introns) & set(exp_events))
+    fp=len(set(spladder_introns) - set(exp_events) - set(gene_events.values()))
+    fn=len(set(exp_events) - set(spladder_introns))
+    return tp, fp, fn
+
+def evaluate_rmats(args, gene_events, exp_events):
+    # We do not consider MXE
+    rmats_introns = []
+    rmats_files_list = glob.glob(os.path.join(RESULTS_DIR, args.sample, args.chromosome,
+                                              'rMATS',     args.gene,   args.exp,
+                                              'fromGTF.[!(n,M)]*.txt'))
+    for rmats_file in rmats_files_list:
+        with open(rmats_file) as rmats_current_event_file:
+            next(rmats_current_event_file) # Drop header
+            event_type = rmats_file[rmats_file.rfind('.', 0, rmats_file.rfind('.')) + 1:
+                                    rmats_file.rfind('.')]
+            event_id = rmats_spladder_event_map[event_type]
+            for row in rmats_current_event_file:
+                _, _, _, _, strand, *positions = row.strip('\n').split('\t')
+                positions = tuple(int(p) for p in positions)
+                rmats_introns += (rmats_parse_line(event_id,
+                                                   strand,
+                                                   positions))
+    tp=len(set(rmats_introns) & set(exp_events))
+    fp=len(set(rmats_introns) - set(exp_events) - set(gene_events.values()))
+    fn=len(set(exp_events) - set(rmats_introns))
+    return tp, fp, fn
+
+def evaluate_majiq(args, gene_events, exp_events):
     return
 
-def evaluate_rmats():
-    return
+def rmats_parse_line(event_id, strand, positions):
+    if not event_id.startswith('alt'):
+        # Exon skipping, mult exon skipping, intron retention
+        return ((positions[3], positions[4] + 1),)
+    elif event_id.startswith('alt_5prime'):
+        if strand is '+':
+            return ((positions[1], positions[4] + 1),
+                    (positions[3], positions[4] + 1))
+        elif strand is '-':
+            return ((positions[5], positions[0] + 1),
+                    (positions[5], positions[2] + 1))
+        else:
+            return ((0, 0), (0, 0))
+    elif event_id.startswith('alt_3prime'):
+        if strand is '+':
+            return ((positions[5], positions[0] + 1),
+                    (positions[5], positions[2] + 1))
+        elif strand is '-':
+            return ((positions[1], positions[4] + 1),
+                    (positions[3], positions[4] + 1))
+        else:
+            return ((0, 0), (0, 0))
+    else:
+        return (0, 0)
 
-def evaluate_majiq():
-    return
+def spladder_parse_line(event_id, strand, positions):
+    if not event_id.startswith('alt'):
+        # Exon skipping, mult exon skipping, intron retention
+        return ((positions[1], positions[4]),)
+    elif event_id.startswith('alt_5prime'):
+        if strand is '+':
+            return ((positions[3], positions[0]),
+                    (positions[5], positions[0]))
+        elif strand is '-':
+            return ((positions[1], positions[2]),
+                    (positions[1], positions[4]))
+        else:
+            return ((0, 0), (0, 0))
+    elif event_id.startswith('alt_3prime'):
+        if strand is '+':
+            return ((positions[1], positions[2]),
+                    (positions[1], positions[4]))
+        elif strand is '-':
+            return ((positions[3], positions[0]),
+                    (positions[5], positions[0]))
+        else:
+            return ((0, 0), (0, 0))
+    else:
+        return (0, 0)
 
 def add_alternative_donor_acceptor(gene_events, ev_name, ev_num, positions):
     if positions[0] < positions[1] < positions[2]:
@@ -90,10 +182,19 @@ def main():
     gene_events = parse_gene_events(args)
     exps_events = parse_exps_events(args, gene_events)
 
-    evaluate_asgal(args, gene_events, exps_events[args.exp])
-    evaluate_spladder()
-    evaluate_rmats()
-    evaluate_majiq()
+    print("TOOL,TP,FP,FN,PREC,REC")
+    tp, fp, fn = evaluate_asgal(   args, gene_events, exps_events[args.exp])
+    print("asgal,{},{},{},{:>.5},{:>.5}".format(tp, fp, fn, tp / max((tp + fn), 1),
+                                                tp / max((tp + fp), 1)))
+    tp, fp, fn = evaluate_spladder(args, gene_events, exps_events[args.exp])
+    print("spladder,{},{},{},{:>.5},{:>.5}".format(tp, fp, fn, tp / max((tp + fn), 1),
+                                                   tp / max((tp + fp), 1)))
+    tp, fp, fn = evaluate_rmats(   args, gene_events, exps_events[args.exp])
+    if tp == fp == 0:
+        fp = 1
+    print("rmats,{},{},{},{:>.5},{:>.5}".format(tp, fp, fn, tp / max((tp + fn), 1),
+                                                   tp / max((tp + fp), 1)))
+    evaluate_majiq(   args, gene_events, exps_events[args.exp])
     # evaluate_suppa()
     # evaluate_leafcutter()
 
