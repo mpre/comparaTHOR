@@ -21,6 +21,11 @@ rmats_ev_map = { 'A5SS' : 'A5',
                  'SE'   : 'ES',
                  'RI'   : 'IR'}
 
+suppa_ev_map = {'A5' : 'A5',
+                'A3' : 'A3',
+                'SE' : 'ES',
+                'RI' : 'IR'}
+
 def evaluate_asgal(args, gene_events, exp_events):
     asgal_introns = {ev_type : () for ev_type in EVENT_TYPES}
     with open(os.path.join(RESULTS_DIR, args.sample, args.chromosome, 'asgal',
@@ -75,7 +80,7 @@ def evaluate_rmats(args, gene_events, exp_events):
                                               'fromGTF.[!(n,M)]*.txt'))
     for rmats_file in rmats_files_list:
         with open(rmats_file) as rmats_current_event_file:
-            next(rmats_current_event_file) # Drop header
+            next(rmats_current_event_file, None) # Drop header
             rmats_ev_type = rmats_file[rmats_file.rfind('.', 0, rmats_file.rfind('.')) + 1:
                                        rmats_file.rfind('.')]
             ev_type = rmats_ev_map[rmats_ev_type]
@@ -92,6 +97,32 @@ def evaluate_rmats(args, gene_events, exp_events):
         tp=len(set(rmats_introns[ev_type]) & set(exp_events[ev_type]))
         fp=len(set(rmats_introns[ev_type]) - set(exp_events[ev_type]) - set(gene_events[ev_type].values()))
         fn=len(set(exp_events[ev_type]) - set(rmats_introns[ev_type]))
+        results[ev_type] = {'nelems' : nelems, 'tp' : tp, 'fp' : fp, 'fn' : fn}
+    return results
+
+def evaluate_suppa(args, gene_events, exp_events):
+    # We do not consider: MX (mutually exclusive), AF (alternative first exon), AL (alternative last exon)
+    suppa_introns = {ev_type : () for ev_type in EVENT_TYPES}
+    with open(os.path.join(RESULTS_DIR, args.sample, args.chromosome, 'suppa',
+                           args.gene,   'Annot',     'iso_tpm.psi')) as suppa_file:
+        next(suppa_file, None) # Drop header
+        for line in suppa_file:
+            info, _, positions1, positions2, strand, *_ = line.split('\t')[0].split(':')
+            _, event_id = info.split(';')
+            if event_id in ['MX', 'AF', 'AL']:
+                continue
+            ev_type = suppa_ev_map[event_id]
+            positions = tuple(int(p) for p in positions1.split('-') + positions2.split('-'))
+            suppa_introns = suppa_parse_line(suppa_introns,
+                                             ev_type,
+                                             strand,
+                                             positions)
+    results = {ev_type : {} for ev_type in EVENT_TYPES}
+    for ev_type in EVENT_TYPES:
+        nelems = len(set(exp_events[ev_type]))
+        tp=len(set(suppa_introns[ev_type]) & set(exp_events[ev_type]))
+        fp=len(set(suppa_introns[ev_type]) - set(exp_events[ev_type]) - set(gene_events[ev_type].values()))
+        fn=len(set(exp_events[ev_type]) - set(suppa_introns[ev_type]))
         results[ev_type] = {'nelems' : nelems, 'tp' : tp, 'fp' : fp, 'fn' : fn}
     return results
 
@@ -138,6 +169,16 @@ def rmats_parse_line(rmats_introns, ev_type, strand, positions):
             rmats_introns[ev_type] += ((positions[1], positions[4] + 1),
                                        (positions[3], positions[4] + 1))
     return rmats_introns
+
+def suppa_parse_line(suppa_introns, ev_type, strand, positions):
+    if ev_type is 'ES':
+        suppa_introns[ev_type] += ((positions[0], positions[3]),)
+    elif ev_type is 'IR':
+        suppa_introns[ev_type] += ((positions[1], positions[2]),)
+    elif ev_type in ['A3', 'A5']:
+        suppa_introns[ev_type] += ((positions[0], positions[1]),
+                                   (positions[2], positions[3]))
+    return suppa_introns
 
 def add_alternative_donor_acceptor(gene_events, ev_type, ev_num, positions):
     if positions[0] < positions[1] < positions[2]:
@@ -209,12 +250,13 @@ def main():
 
     results =  evaluate_rmats(args, gene_events, exps_events[args.exp])
     for ev_type in EVENT_TYPES:
-        print("spladder,{},{},{},{},{}".format(ev_type, results[ev_type]['nelems'], results[ev_type]['tp'],
+        print("rmats,{},{},{},{},{}".format(ev_type, results[ev_type]['nelems'], results[ev_type]['tp'],
                                                results[ev_type]['fp'], results[ev_type]['fn']))
 
-#     # evaluate_majiq(   args, gene_events, exps_events[args.exp])
-#     evaluate_suppa()
-#     # evaluate_leafcutter()
+    results = evaluate_suppa(args, gene_events, exps_events[args.exp])
+    for ev_type in EVENT_TYPES:
+        print("suppa,{},{},{},{},{}".format(ev_type, results[ev_type]['nelems'], results[ev_type]['tp'],
+                                               results[ev_type]['fp'], results[ev_type]['fn']))
 
 if __name__ == "__main__":
     main()
