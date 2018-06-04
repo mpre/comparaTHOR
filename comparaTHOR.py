@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/python3
 
 import argparse
 import sys
@@ -14,7 +14,8 @@ EVENT_TYPES = ('A5', 'A3', 'IR', 'ES')
 spladder_ev_map = {'alt_5prime'       : 'A5',
                    'alt_3prime'       : 'A3',
                    'exon_skip'        : 'ES',
-                   'intron_retention' : 'IR'}
+                   'intron_retention' : 'IR',
+                   'mult_exon_skip'   : 'NA'}
 
 rmats_ev_map = { 'A5SS' : 'A5',
                  'A3SS' : 'A3',
@@ -104,7 +105,7 @@ def evaluate_suppa(args, gene_events, exp_events):
     # We do not consider: MX (mutually exclusive), AF (alternative first exon), AL (alternative last exon)
     suppa_introns = {ev_type : () for ev_type in EVENT_TYPES}
     with open(os.path.join(RESULTS_DIR, args.sample, args.chromosome, 'suppa',
-                           args.gene,   'Annot',     'iso_tpm.psi')) as suppa_file:
+                           args.gene,   args.exp,    'iso_tpm.psi')) as suppa_file:
         next(suppa_file, None) # Drop header
         for line in suppa_file:
             info, _, positions1, positions2, strand, *_ = line.split('\t')[0].split(':')
@@ -125,9 +126,6 @@ def evaluate_suppa(args, gene_events, exp_events):
         fn=len(set(exp_events[ev_type]) - set(suppa_introns[ev_type]))
         results[ev_type] = {'nelems' : nelems, 'tp' : tp, 'fp' : fp, 'fn' : fn}
     return results
-
-def evaluate_majiq(args, gene_events, exp_events):
-    return
 
 def spladder_parse_line(spladder_introns, event_id, strand, positions):
     ev_type = spladder_ev_map[event_id[0:event_id.rfind('_')]]
@@ -236,27 +234,47 @@ def main():
     gene_events = parse_gene_events(args)
     exps_events = parse_exps_events(args, gene_events)
 
-    print("TOOL,EV_TYPE,NELEMS,TP,FP,FN")
+    print("SIZE,GENOME,GENE,EVENT,TOOL,EV_TYPE,NELEMS,TP,FP,FN")
 
     results = evaluate_asgal(args, gene_events, exps_events[args.exp])
     for ev_type in EVENT_TYPES:
-        print("asgal,{},{},{},{},{}".format(ev_type, results[ev_type]['nelems'], results[ev_type]['tp'],
-                                            results[ev_type]['fp'], results[ev_type]['fn']))
+        print("{},{},{},{},asgal,{},{},{},{},{}".format(args.sample, args.chromosome,
+                                                        args.gene, args.exp,
+                                                        ev_type,
+                                                        results[ev_type]['nelems'],
+                                                        results[ev_type]['tp'],
+                                                        results[ev_type]['fp'],
+                                                        results[ev_type]['fn']))
     
     results = evaluate_spladder(args, gene_events, exps_events[args.exp])
     for ev_type in EVENT_TYPES:
-        print("spladder,{},{},{},{},{}".format(ev_type, results[ev_type]['nelems'], results[ev_type]['tp'],
-                                               results[ev_type]['fp'], results[ev_type]['fn']))
+        print("{},{},{},{},spladder,{},{},{},{},{}".format(args.sample, args.chromosome,
+                                                           args.gene, args.exp,
+                                                           ev_type,
+                                                           results[ev_type]['nelems'],
+                                                           results[ev_type]['tp'],
+                                                           results[ev_type]['fp'],
+                                                           results[ev_type]['fn']))
 
     results =  evaluate_rmats(args, gene_events, exps_events[args.exp])
     for ev_type in EVENT_TYPES:
-        print("rmats,{},{},{},{},{}".format(ev_type, results[ev_type]['nelems'], results[ev_type]['tp'],
-                                               results[ev_type]['fp'], results[ev_type]['fn']))
+        print("{},{},{},{},rmats,{},{},{},{},{}".format(args.sample, args.chromosome,
+                                                        args.gene, args.exp,
+                                                        ev_type,
+                                                        results[ev_type]['nelems'],
+                                                        results[ev_type]['tp'],
+                                                        results[ev_type]['fp'],
+                                                        results[ev_type]['fn']))
 
     results = evaluate_suppa(args, gene_events, exps_events[args.exp])
     for ev_type in EVENT_TYPES:
-        print("suppa,{},{},{},{},{}".format(ev_type, results[ev_type]['nelems'], results[ev_type]['tp'],
-                                               results[ev_type]['fp'], results[ev_type]['fn']))
+        print("{},{},{},{},suppa,{},{},{},{},{}".format(args.sample, args.chromosome,
+                                                        args.gene, args.exp,
+                                                        ev_type,
+                                                        results[ev_type]['nelems'],
+                                                        results[ev_type]['tp'],
+                                                        results[ev_type]['fp'],
+                                                        results[ev_type]['fn']))
 
 if __name__ == "__main__":
     main()
