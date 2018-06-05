@@ -214,7 +214,7 @@ def main():
 
     gene_events = parse_gene_events(args)
 
-    print("SIZE,GENOME,GENE,EVENT,TOOL,EV_TYPE,NELEMS,TP,FP,FN")
+    print("SIZE,GENOME,GENE,TOOL,EV_TYPE,NELEMS,TP,FP,FN")
 
     results = evaluate_asgal_annot(args, gene_events)
     for ev_type in EVENT_TYPES:
