@@ -30,7 +30,7 @@ suppa_ev_map = {'A5' : 'A5',
 def evaluate_asgal_annot(args, gene_events):
     asgal_introns = {ev_type : () for ev_type in EVENT_TYPES}
     with open(os.path.join(RESULTS_DIR, args.sample, args.chromosome, 'asgal_annot',
-                           args.gene + '.events.csv'),
+                           args.gene,   args.gene + '.events.csv'),
               newline='') as asgal_csv:
         results = csv.reader(asgal_csv)
         next(results, None) # Drop header
@@ -95,18 +95,18 @@ def evaluate_rmats_annot(args, gene_events):
                                                  positions)
     results = {ev_type : {} for ev_type in EVENT_TYPES}
     for ev_type in EVENT_TYPES:
-        nelems = len(set(exp_events[ev_type]))
+        nelems = len(set(gene_events[ev_type].values()))
         tp=len(set(rmats_introns[ev_type]) & set(gene_events[ev_type].values()))
         fp=len(set(rmats_introns[ev_type]) - set(gene_events[ev_type].values()))
         fn=len(set(gene_events[ev_type].values()) - set(rmats_introns[ev_type]))
         results[ev_type] = {'nelems' : nelems, 'tp' : tp, 'fp' : fp, 'fn' : fn}
     return results
 
-def evaluate_suppa_annot(args, gene_events, exp_events):
+def evaluate_suppa_annot(args, gene_events):
     # We do not consider: MX (mutually exclusive), AF (alternative first exon), AL (alternative last exon)
     suppa_introns = {ev_type : () for ev_type in EVENT_TYPES}
     with open(os.path.join(RESULTS_DIR, args.sample, args.chromosome, 'suppa_annot',
-                           args.gene,   'Annot',     'iso_tpm.psi')) as suppa_file:
+                           args.gene,   'iso_tpm.psi')) as suppa_file:
         next(suppa_file, None) # Drop header
         for line in suppa_file:
             info, _, positions1, positions2, strand, *_ = line.split('\t')[0].split(':')
@@ -121,10 +121,10 @@ def evaluate_suppa_annot(args, gene_events, exp_events):
                                              positions)
     results = {ev_type : {} for ev_type in EVENT_TYPES}
     for ev_type in EVENT_TYPES:
-        nelems = len(set(exp_events[ev_type]))
-        tp=len(set(suppa_introns[ev_type]) & set(exp_events[ev_type]))
-        fp=len(set(suppa_introns[ev_type]) - set(exp_events[ev_type]) - set(gene_events[ev_type].values()))
-        fn=len(set(exp_events[ev_type]) - set(suppa_introns[ev_type]))
+        nelems = len(set(gene_events[ev_type].values()))
+        tp=len(set(suppa_introns[ev_type]) & set(gene_events[ev_type].values()))
+        fp=len(set(suppa_introns[ev_type]) - set(gene_events[ev_type].values()))
+        fn=len(set(gene_events[ev_type].values()) - set(suppa_introns[ev_type]))
         results[ev_type] = {'nelems' : nelems, 'tp' : tp, 'fp' : fp, 'fn' : fn}
     return results
 
@@ -218,43 +218,43 @@ def main():
 
     results = evaluate_asgal_annot(args, gene_events)
     for ev_type in EVENT_TYPES:
-        print("{},{},{},{},asgal-annot,{},{},{},{},{}".format(args.sample, args.chromosome,
-                                                              args.gene, args.exp,
-                                                              ev_type,
-                                                              results[ev_type]['nelems'],
-                                                              results[ev_type]['tp'],
-                                                              results[ev_type]['fp'],
-                                                              results[ev_type]['fn']))
+        print("{},{},{},asgal-annot,{},{},{},{},{}".format(args.sample, args.chromosome,
+                                                           args.gene,
+                                                           ev_type,
+                                                           results[ev_type]['nelems'],
+                                                           results[ev_type]['tp'],
+                                                           results[ev_type]['fp'],
+                                                           results[ev_type]['fn']))
 
     results = evaluate_spladder_annot(args, gene_events)
     for ev_type in EVENT_TYPES:
-        print("{},{},{},{},spladder-annot,{},{},{},{},{}".format(args.sample, args.chromosome,
-                                                                 args.gene, args.exp,
-                                                                 ev_type,
-                                                                 results[ev_type]['nelems'],
-                                                                 results[ev_type]['tp'],
-                                                                 results[ev_type]['fp'],
-                                                                 results[ev_type]['fn']))
+        print("{},{},{},spladder-annot,{},{},{},{},{}".format(args.sample, args.chromosome,
+                                                              args.gene,
+                                                              ev_type,
+                                                              results[ev_type]['nelems'],
+                                                              results[ev_type]['tp'],
+                                                              results[ev_type]['fp'],
+                                                              results[ev_type]['fn']))
 
     results =  evaluate_rmats_annot(args, gene_events)
     for ev_type in EVENT_TYPES:
-        print("{},{},{},{},rmats-annot,{},{},{},{},{}".format(args.sample, args.chromosome,
-                                                              args.gene, args.exp,
-                                                              ev_type,
-                                                              results[ev_type]['nelems'],
-                                                              results[ev_type]['tp'],
-                                                              results[ev_type]['fp'],
-                                                              results[ev_type]['fn']))
+        print("{},{},{},rmats-annot,{},{},{},{},{}".format(args.sample, args.chromosome,
+                                                           args.gene,
+                                                           ev_type,
+                                                           results[ev_type]['nelems'],
+                                                           results[ev_type]['tp'],
+                                                           results[ev_type]['fp'],
+                                                           results[ev_type]['fn']))
 
-    results = evaluate_suppa_annot(args, gene_events, exps_events[args.exp])
+    results = evaluate_suppa_annot(args, gene_events)
     for ev_type in EVENT_TYPES:
-        print("{},{},{},{},suppa-annot,{},{},{},{},{}".format(args.sample, args.chromosome,
-                                                              args.gene, args.exp,
-                                                              ev_type,
-                                                              results[ev_type]['nelems'],
-                                                              results[ev_type]['tp'],
-                                                              results[ev_type]['fp'],
-                                                              results[ev_type]['fn']))
+        print("{},{},{},suppa-annot,{},{},{},{},{}".format(args.sample, args.chromosome,
+                                                           args.gene,
+                                                           ev_type,
+                                                           results[ev_type]['nelems'],
+                                                           results[ev_type]['tp'],
+                                                           results[ev_type]['fp'],
+                                                           results[ev_type]['fn']))
 
 
 if __name__ == "__main__":
